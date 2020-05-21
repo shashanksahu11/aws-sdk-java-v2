@@ -16,7 +16,9 @@
 package software.amazon.awssdk.enhanced.dynamodb;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
+
 import software.amazon.awssdk.annotations.SdkPublicApi;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 
@@ -72,8 +74,17 @@ public interface TableMetadata {
      * attribute when using the versioned record extension.
      *
      * @return A collection of all key attribute names for the table.
+     *
+     * @deprecated Use {@link #keyAttributes()} instead.
      */
+    @Deprecated
     Collection<String> allKeys();
+
+    Collection<Index> indices();
+
+    Map<String, Object> customMetadata();
+
+    Collection<Key> keyAttributes();
 
     /**
      * Returns the DynamoDb scalar attribute type associated with a key attribute if one is applicable.
@@ -123,5 +134,16 @@ public interface TableMetadata {
         // This value is arbitrary and ephemeral but could end up being serialized with TableMetadata through the
         // actions of a client, so it should not be altered unless absolutely necessary.
         return "$PRIMARY_INDEX";
+    }
+
+    interface Index {
+        String name();
+        Optional<Key> partitionKey();
+        Optional<Key> sortKey();
+    }
+
+    interface Key {
+        String name();
+        AttributeValueType attributeValueType();
     }
 }

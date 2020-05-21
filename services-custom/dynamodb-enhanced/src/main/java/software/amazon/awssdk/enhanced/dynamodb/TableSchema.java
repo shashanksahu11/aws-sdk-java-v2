@@ -16,9 +16,11 @@
 package software.amazon.awssdk.enhanced.dynamodb;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import software.amazon.awssdk.annotations.SdkPublicApi;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.BeanTableSchema;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.ImmutableTableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.StaticTableSchema;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
@@ -41,6 +43,11 @@ public interface TableSchema<T> {
      */
     static <T> StaticTableSchema.Builder<T> builder(Class<T> itemClass) {
         return StaticTableSchema.builder(itemClass);
+    }
+
+    static <T, B> ImmutableTableSchema.Builder<T, B> builder(Class<T> immutableItemClass,
+                                                             Class<B> immutableBuilderClass) {
+        return ImmutableTableSchema.builder(immutableItemClass, immutableBuilderClass);
     }
 
     /**
@@ -96,11 +103,11 @@ public interface TableSchema<T> {
      * Returns a single attribute value from the modelled object.
      *
      * @param item The modelled Java object to extract the attribute from.
-     * @param key The attribute name describing which attribute to extract.
+     * @param attributeName The attribute name describing which attribute to extract.
      * @return A single {@link AttributeValue} representing the requested modelled attribute in the model object or
      * null if the attribute has not been set with a value in the modelled object.
      */
-    AttributeValue attributeValue(T item, String key);
+    AttributeValue attributeValue(T item, String attributeName);
 
     /**
      * Returns the object that describes the structure of the table being modelled by the mapper. This includes
@@ -115,4 +122,8 @@ public interface TableSchema<T> {
      * @return The {@link EnhancedType} of the modelled item this TableSchema maps to.
      */
     EnhancedType<T> itemType();
+
+    List<String> attributeNames();
+
+    boolean isAbstract();
 }

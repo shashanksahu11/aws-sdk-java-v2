@@ -18,12 +18,15 @@ package software.amazon.awssdk.enhanced.dynamodb.mapper;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+
 import software.amazon.awssdk.annotations.SdkPublicApi;
 import software.amazon.awssdk.enhanced.dynamodb.AttributeValueType;
 import software.amazon.awssdk.enhanced.dynamodb.TableMetadata;
+import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.StaticIndex;
+import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.StaticKey;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 
 /**
@@ -35,7 +38,7 @@ import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 public final class StaticTableMetadata implements TableMetadata {
     private final Map<String, Object> customMetadata;
     private final Map<String, Index> indexByNameMap;
-    private final Map<String, AttributeValueType> keyAttributes;
+    private final Map<String, Key> keyAttributes;
 
     private StaticTableMetadata(Builder builder) {
         this.customMetadata = Collections.unmodifiableMap(builder.customMetadata);
@@ -73,8 +76,8 @@ public final class StaticTableMetadata implements TableMetadata {
     public String indexPartitionKey(String indexName) {
         Index index = getIndex(indexName);
 
-        if (index.getIndexPartitionKey() == null) {
-            if (!TableMetadata.primaryIndexName().equals(indexName) && index.getIndexSortKey() != null) {
+        if (!index.partitionKey().isPresent()) {
+            if (!TableMetadata.primaryIndexName().equals(indexName) && index.sortKey().isPresent()) {
                 // Local secondary index, use primary partition key
                 return primaryPartitionKey();
             }
@@ -84,34 +87,49 @@ public final class StaticTableMetadata implements TableMetadata {
                                                + "Index name: " + indexName);
         }
 
-        return index.getIndexPartitionKey();
+        return index.partitionKey().get().name();
     }
 
     @Override
     public Optional<String> indexSortKey(String indexName) {
         Index index = getIndex(indexName);
 
-        return Optional.ofNullable(index.getIndexSortKey());
+        return index.sortKey().map(Key::name);
     }
 
     @Override
     public Collection<String> indexKeys(String indexName) {
         Index index = getIndex(indexName);
 
-        if (index.getIndexSortKey() != null) {
-            if (!TableMetadata.primaryIndexName().equals(indexName) && index.getIndexPartitionKey() == null) {
+        if (index.sortKey().isPresent()) {
+            if (!TableMetadata.primaryIndexName().equals(indexName) && !index.partitionKey().isPresent()) {
                 // Local secondary index, use primary index for partition key
-                return Collections.unmodifiableList(Arrays.asList(primaryPartitionKey(), index.getIndexSortKey()));
+                return Collections.unmodifiableList(Arrays.asList(primaryPartitionKey(), index.sortKey().get().name()));
             }
-            return Collections.unmodifiableList(Arrays.asList(index.getIndexPartitionKey(), index.getIndexSortKey()));
+            return Collections.unmodifiableList(Arrays.asList(index.partitionKey().get().name(), index.sortKey().get().name()));
         } else {
-            return Collections.singletonList(index.getIndexPartitionKey());
+            return Collections.singletonList(index.partitionKey().get().name());
         }
     }
 
     @Override
     public Collection<String> allKeys() {
         return this.keyAttributes.keySet();
+    }
+
+    @Override
+    public Collection<Index> indices() {
+        return indexByNameMap.values();
+    }
+
+    @Override
+    public Map<String, Object> customMetadata() {
+        return this.customMetadata;
+    }
+
+    @Override
+    public Collection<Key> keyAttributes() {
+        return this.keyAttributes.values();
     }
 
     private Index getIndex(String indexName) {
@@ -134,13 +152,13 @@ public final class StaticTableMetadata implements TableMetadata {
 
     @Override
     public Optional<ScalarAttributeType> scalarAttributeType(String keyAttribute) {
-        AttributeValueType attributeValueType = this.keyAttributes.get(keyAttribute);
+        Key key = this.keyAttributes.get(keyAttribute);
 
-        if (attributeValueType == null) {
+        if (key == null) {
             throw new IllegalArgumentException("Key attribute '" + keyAttribute + "' not found in table metadata.");
         }
 
-        return Optional.ofNullable(attributeValueType.scalarAttributeType());
+        return Optional.ofNullable(key.attributeValueType().scalarAttributeType());
     }
 
     @Override
@@ -175,9 +193,9 @@ public final class StaticTableMetadata implements TableMetadata {
      * Builder for {@link StaticTableMetadata}
      */
     public static class Builder {
-        private final Map<String, Object> customMetadata = new HashMap<>();
-        private final Map<String, Index> indexByNameMap = new HashMap<>();
-        private final Map<String, AttributeValueType> keyAttributes = new HashMap<>();
+        private final Map<String, Object> customMetadata = new LinkedHashMap<>();
+        private final Map<String, Index> indexByNameMap = new LinkedHashMap<>();
+        private final Map<String, Key> keyAttributes = new LinkedHashMap<>();
 
         private Builder() {
         }
@@ -214,16 +232,17 @@ public final class StaticTableMetadata implements TableMetadata {
          * @throws IllegalArgumentException if a partition key has already been defined for this index
          */
         public Builder addIndexPartitionKey(String indexName, String attributeName, AttributeValueType attributeValueType) {
-            Index index = indexByNameMap.computeIfAbsent(indexName, $ -> new Index(indexName));
+            Index index = indexByNameMap.get(indexName);
 
-            if (index.getIndexPartitionKey() != null) {
+            if (index != null && index.partitionKey().isPresent()) {
                 throw new IllegalArgumentException("Attempt to set an index partition key that conflicts with an "
                                                    + "existing index partition key of the same name and index. Index "
                                                    + "name: " + indexName + "; attribute name: " + attributeName);
             }
 
-            index.setIndexPartitionKey(attributeName);
-            index.setIndexPartitionType(attributeValueType);
+            Key partitionKey = StaticKey.create(attributeName, attributeValueType);
+            indexByNameMap.put(indexName,
+                               StaticIndex.builderFrom(index).name(indexName).partitionKey(partitionKey).build());
             markAttributeAsKey(attributeName, attributeValueType);
             return this;
         }
@@ -236,16 +255,17 @@ public final class StaticTableMetadata implements TableMetadata {
          * @throws IllegalArgumentException if a sort key has already been defined for this index
          */
         public Builder addIndexSortKey(String indexName, String attributeName, AttributeValueType attributeValueType) {
-            Index index = indexByNameMap.computeIfAbsent(indexName, $ -> new Index(indexName));
+            Index index = indexByNameMap.get(indexName);
 
-            if (index.getIndexSortKey() != null) {
+            if (index != null && index.sortKey().isPresent()) {
                 throw new IllegalArgumentException("Attempt to set an index sort key that conflicts with an existing"
                                                    + " index sort key of the same name and index. Index name: "
                                                    + indexName + "; attribute name: " + attributeName);
             }
 
-            index.setIndexSortKey(attributeName);
-            index.setIndexSortType(attributeValueType);
+            Key sortKey = StaticKey.create(attributeName, attributeValueType);
+            indexByNameMap.put(indexName,
+                               StaticIndex.builderFrom(index).name(indexName).sortKey(sortKey).build());
             markAttributeAsKey(attributeName, attributeValueType);
             return this;
         }
@@ -259,15 +279,15 @@ public final class StaticTableMetadata implements TableMetadata {
          * @param attributeValueType the {@link AttributeValueType} of the pseudo-key
          */
         public Builder markAttributeAsKey(String attributeName, AttributeValueType attributeValueType) {
-            AttributeValueType existing = keyAttributes.get(attributeName);
+            Key existing = keyAttributes.get(attributeName);
 
-            if (existing != null && !existing.equals(attributeValueType)) {
+            if (existing != null && !existing.attributeValueType().equals(attributeValueType)) {
                 throw new IllegalArgumentException("Attempt to mark an attribute as a key with a different "
                                                    + "AttributeValueType than one that has already been recorded.");
             }
 
             if (existing == null) {
-                keyAttributes.put(attributeName, attributeValueType);
+                keyAttributes.put(attributeName, StaticKey.create(attributeName, attributeValueType));
             }
 
             return this;
@@ -276,107 +296,23 @@ public final class StaticTableMetadata implements TableMetadata {
         /**
          * Package-private method to merge the contents of a constructed {@link TableMetadata} into this builder.
          */
-        Builder mergeWith(StaticTableMetadata other) {
-            other.indexByNameMap.forEach((key, index) -> {
-                if (index.getIndexPartitionKey() != null) {
-                    addIndexPartitionKey(index.getIndexName(),
-                                         index.getIndexPartitionKey(),
-                                         index.getIndexPartitionType());
-                }
+        Builder mergeWith(TableMetadata other) {
+            other.indices().forEach(
+                index -> {
+                    index.partitionKey().ifPresent(
+                        partitionKey -> addIndexPartitionKey(index.name(),
+                                                             partitionKey.name(),
+                                                             partitionKey.attributeValueType()));
 
-                if (index.getIndexSortKey() != null) {
-                    addIndexSortKey(index.getIndexName(), index.getIndexSortKey(), index.getIndexSortType());
-                }
-            });
+                    index.sortKey().ifPresent(
+                        sortKey -> addIndexSortKey(index.name(), sortKey.name(), sortKey.attributeValueType())
+                    );
+                });
 
-            other.customMetadata.forEach(this::addCustomMetadataObject);
-            other.keyAttributes.forEach(this::markAttributeAsKey);
+            other.customMetadata().forEach(this::addCustomMetadataObject);
+            other.keyAttributes().forEach(keyAttribute -> markAttributeAsKey(keyAttribute.name(),
+                                                                             keyAttribute.attributeValueType()));
             return this;
-        }
-    }
-
-    private static class Index {
-        private final String indexName;
-        private String indexPartitionKey;
-        private String indexSortKey;
-        private AttributeValueType indexPartitionType;
-        private AttributeValueType indexSortType;
-
-        private Index(String indexName) {
-            this.indexName = indexName;
-        }
-
-        private String getIndexName() {
-            return indexName;
-        }
-
-        private String getIndexPartitionKey() {
-            return indexPartitionKey;
-        }
-
-        private String getIndexSortKey() {
-            return indexSortKey;
-        }
-
-        private AttributeValueType getIndexPartitionType() {
-            return indexPartitionType;
-        }
-
-        private AttributeValueType getIndexSortType() {
-            return indexSortType;
-        }
-
-        private void setIndexPartitionKey(String indexPartitionKey) {
-            this.indexPartitionKey = indexPartitionKey;
-        }
-
-        private void setIndexSortKey(String indexSortKey) {
-            this.indexSortKey = indexSortKey;
-        }
-
-        private void setIndexPartitionType(AttributeValueType indexPartitionType) {
-            this.indexPartitionType = indexPartitionType;
-        }
-
-        private void setIndexSortType(AttributeValueType indexSortType) {
-            this.indexSortType = indexSortType;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-
-            Index index = (Index) o;
-
-            if (indexName != null ? ! indexName.equals(index.indexName) : index.indexName != null) {
-                return false;
-            }
-            if (indexPartitionKey != null ? ! indexPartitionKey.equals(index.indexPartitionKey) :
-                index.indexPartitionKey != null) {
-                return false;
-            }
-            if (indexSortKey != null ? ! indexSortKey.equals(index.indexSortKey) : index.indexSortKey != null) {
-                return false;
-            }
-            if (indexPartitionType != index.indexPartitionType) {
-                return false;
-            }
-            return indexSortType == index.indexSortType;
-        }
-
-        @Override
-        public int hashCode() {
-            int result = indexName != null ? indexName.hashCode() : 0;
-            result = 31 * result + (indexPartitionKey != null ? indexPartitionKey.hashCode() : 0);
-            result = 31 * result + (indexSortKey != null ? indexSortKey.hashCode() : 0);
-            result = 31 * result + (indexPartitionType != null ? indexPartitionType.hashCode() : 0);
-            result = 31 * result + (indexSortType != null ? indexSortType.hashCode() : 0);
-            return result;
         }
     }
 }

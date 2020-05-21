@@ -204,26 +204,25 @@ public class StaticAttributeTest {
         assertThat(attributeConverterR).isEqualTo(attributeConverter);
     }
 
-    @Test
-    public void resolve_uses_customConverter() {
-        when(attributeConverter.transformFrom(any())).thenReturn(AttributeValue.builder().s("test-string-custom").build());
-
-        StaticAttribute<SimpleItem, String> staticAttribute = StaticAttribute.builder(SimpleItem.class, String.class)
-                                                                         .name("test-attribute")
-                                                                         .getter(SimpleItem::getAString)
-                                                                         .setter(SimpleItem::setAString)
-                                                                         .attributeConverter(attributeConverter)
-                                                                         .build();
-
-        ResolvedStaticAttribute<SimpleItem> resolvedAttribute =
-            staticAttribute.resolve(AttributeConverterProvider.defaultProvider());
-
-        Function<SimpleItem, AttributeValue> attributeValueFunction = resolvedAttribute.attributeGetterMethod();
-
-        SimpleItem item = new SimpleItem("test-string");
-        AttributeValue resultAttributeValue = attributeValueFunction.apply(item);
-
-        assertThat(resultAttributeValue.s()).isEqualTo("test-string-custom");
-    }
-
+//    @Test
+//    public void resolve_uses_customConverter() {
+//        when(attributeConverter.transformFrom(any())).thenReturn(AttributeValue.builder().s("test-string-custom").build());
+//
+//        StaticAttribute<SimpleItem, String> staticAttribute = StaticAttribute.builder(SimpleItem.class, String.class)
+//                                                                         .name("test-attribute")
+//                                                                         .getter(SimpleItem::getAString)
+//                                                                         .setter(SimpleItem::setAString)
+//                                                                         .attributeConverter(attributeConverter)
+//                                                                         .build();
+//
+//        ResolvedStaticAttribute<SimpleItem> resolvedAttribute =
+//            staticAttribute.resolve(AttributeConverterProvider.defaultProvider());
+//
+//        Function<SimpleItem, AttributeValue> attributeValueFunction = resolvedAttribute.attributeGetterMethod();
+//
+//        SimpleItem item = new SimpleItem("test-string");
+//        AttributeValue resultAttributeValue = attributeValueFunction.apply(item);
+//
+//        assertThat(resultAttributeValue.s()).isEqualTo("test-string-custom");
+//    }
 }

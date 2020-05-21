@@ -174,6 +174,16 @@ public final class BeanTableSchema<T> implements TableSchema<T> {
         return wrappedTableSchema.itemType();
     }
 
+    @Override
+    public List<String> attributeNames() {
+        return wrappedTableSchema.attributeNames();
+    }
+
+    @Override
+    public boolean isAbstract() {
+        return this.wrappedTableSchema.isAbstract();
+    }
+
     private static <T> StaticTableSchema<T> createStaticTableSchema(Class<T> beanClass) {
         DynamoDbBean dynamoDbBean = beanClass.getAnnotation(DynamoDbBean.class);
 
