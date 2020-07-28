@@ -15,26 +15,31 @@
 
 package software.amazon.awssdk.core.waiters;
 
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Supplier;
 import software.amazon.awssdk.annotations.SdkPublicApi;
-import software.amazon.awssdk.core.internal.waiters.DefaultWaiter;
+import software.amazon.awssdk.core.internal.waiters.DefaultAsyncWaiter;
 
 /**
- * Waiter utility class that waits for a resource to transition to the desired state.
+ * Waiter utility class that waits for a resource to transition to the desired state asynchrounsly
  *
  * @param <T> the type of the resource returned from the polling function
  */
 @SdkPublicApi
-public interface Waiter<T> {
+public interface AsyncWaiter<T> {
 
     /**
-     * It returns when the resource enters into a desired state or
+     * Runs the provided polling function. It completes when the resource enters into a desired state or
      * it is determined that the resource will never enter into the desired state.
      *
-     * @param pollingFunction Represents the input of a <code>DescribeTable</code> operation.
-     * @return the response
+     * @param asyncPollingFunction the polling function to trigger
+     * @return A CompletableFuture containing the result of the DescribeTable operation returned by the service. It completes
+     * successfully when the resource enters into a desired state or it completes exceptionally when it is determined that the
+     * resource will never enter into the desired state.
      */
-    WaiterResponse<T> run(Supplier<T> pollingFunction);
+    CompletableFuture<WaiterResponse<T>> runAsync(Supplier<CompletableFuture<T>> asyncPollingFunction);
 
     /**
      * Creates a newly initialized builder for the waiter object.
@@ -44,7 +49,7 @@ public interface Waiter<T> {
      * @return a Waiter builder
      */
     static <T> Builder<T> builder(Class<? extends T> responseClass) {
-        return DefaultWaiter.builder();
+        return DefaultAsyncWaiter.builder();
     }
 
     /**
@@ -54,9 +59,18 @@ public interface Waiter<T> {
     interface Builder<T> extends WaiterBuilder<T, Builder<T>> {
 
         /**
+         * Defines the {@link ScheduledExecutorService} used to schedule async polling attempts
+         * Only required if you are calling {@link AsyncWaiter#runAsync(Supplier)}
+         *
+         * @param scheduledExecutorService the schedule executor service
+         * @return a reference to this object so that method calls can be chained together.
+         */
+        Builder<T> scheduledExecutorService(ScheduledExecutorService scheduledExecutorService);
+
+        /**
          * An immutable object that is created from the properties that have been set on the builder.
          * @return a reference to this object so that method calls can be chained together.
          */
-        Waiter<T> build();
+        AsyncWaiter<T> build();
     }
 }

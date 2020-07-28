@@ -15,8 +15,8 @@
 
 package software.amazon.awssdk.core.waiters;
 
-import java.util.Optional;
 import software.amazon.awssdk.annotations.SdkPublicApi;
+import software.amazon.awssdk.core.internal.waiters.ResponseOrException;
 
 /**
  * The response returned from a waiter operation
@@ -26,14 +26,9 @@ import software.amazon.awssdk.annotations.SdkPublicApi;
 public interface WaiterResponse<T> {
 
     /**
-     * @return the optional response received that has matched with the waiter success condition
+     * @return the ResponseOrException union received that has matched with the waiter success condition
      */
-    Optional<T> response();
-
-    /**
-     * @return the optional exception thrown from the waiter operation that has matched with the waiter success condition
-     */
-    Optional<Throwable> exception();
+    ResponseOrException<T> responseOrException();
 
     /**
      * @return the number of attempts executed

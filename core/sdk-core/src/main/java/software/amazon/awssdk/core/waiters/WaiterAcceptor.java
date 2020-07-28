@@ -15,6 +15,7 @@
 
 package software.amazon.awssdk.core.waiters;
 
+import java.util.Optional;
 import java.util.function.Predicate;
 import software.amazon.awssdk.annotations.SdkPublicApi;
 
@@ -48,6 +49,15 @@ public interface WaiterAcceptor<T> {
      */
     default boolean matches(Throwable throwable) {
         return false;
+    }
+
+    /**
+     * Optional message to provide pertaining to the next WaiterState
+     *
+     * @return the optional message
+     */
+    default Optional<String> message() {
+        return Optional.empty();
     }
 
     /**
@@ -135,6 +145,32 @@ public interface WaiterAcceptor<T> {
     }
 
     /**
+     * Creates a success waiter acceptor which determines if the exception should transition the waiter to success state
+     *
+     * @param responsePredicate the predicate of the response
+     * @param <T> the response type
+     * @return a {@link WaiterAcceptor}
+     */
+    static <T> WaiterAcceptor<T> errorOnResponseAcceptor(Predicate<T> responsePredicate, String message) {
+        return new WaiterAcceptor<T>() {
+            @Override
+            public WaiterState waiterState() {
+                return WaiterState.FAILURE;
+            }
+
+            @Override
+            public boolean matches(T response) {
+                return responsePredicate.test(response);
+            }
+
+            @Override
+            public Optional<String> message() {
+                return Optional.of(message);
+            }
+        };
+    }
+
+    /**
      * Creates a retry on exception waiter acceptor which determines if the exception should transition the waiter to retry state
      *
      * @param errorPredicate the {@link Throwable} predicate
@@ -151,6 +187,27 @@ public interface WaiterAcceptor<T> {
             @Override
             public boolean matches(Throwable t) {
                 return errorPredicate.test(t);
+            }
+        };
+    }
+
+    /**
+     * Creates a retry on exception waiter acceptor which determines if the exception should transition the waiter to retry state
+     *
+     * @param responsePredicate the {@link Throwable} predicate
+     * @param <T> the response type
+     * @return a {@link WaiterAcceptor}
+     */
+    static <T> WaiterAcceptor<T> retryOnResponseAcceptor(Predicate<T> responsePredicate) {
+        return new WaiterAcceptor<T>() {
+            @Override
+            public WaiterState waiterState() {
+                return WaiterState.RETRY;
+            }
+
+            @Override
+            public boolean matches(T t) {
+                return responsePredicate.test(t);
             }
         };
     }

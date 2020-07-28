@@ -18,34 +18,39 @@ package software.amazon.awssdk.core.internal.waiters;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Supplier;
 import software.amazon.awssdk.annotations.SdkInternalApi;
 import software.amazon.awssdk.annotations.ThreadSafe;
+import software.amazon.awssdk.core.waiters.AsyncWaiter;
 import software.amazon.awssdk.core.waiters.PollingStrategy;
-import software.amazon.awssdk.core.waiters.Waiter;
 import software.amazon.awssdk.core.waiters.WaiterAcceptor;
 import software.amazon.awssdk.core.waiters.WaiterResponse;
 import software.amazon.awssdk.utils.Validate;
 
 /**
- * Default implementation of the generic {@link Waiter}.
+ * Default implementation of the generic {@link AsyncWaiter}.
  * @param <T> the type of the response expected to return from the polling function
  */
 @SdkInternalApi
 @ThreadSafe
-public final class DefaultWaiter<T> implements Waiter<T> {
+public final class DefaultAsyncWaiter<T> implements AsyncWaiter<T> {
     private final PollingStrategy pollingStrategy;
+    private final ScheduledExecutorService executorService;
     private final List<WaiterAcceptor<T>> waiterAcceptors;
+    private final AsyncWaiterExecutor<T> handler;
 
-    private DefaultWaiter(DefaultBuilder<T> builder) {
+    private DefaultAsyncWaiter(DefaultBuilder<T> builder) {
+        this.executorService = builder.scheduledExecutorService;
         this.pollingStrategy = Validate.paramNotNull(builder.pollingStrategy, "pollingStrategy");
         this.waiterAcceptors = Collections.unmodifiableList(builder.waiterAcceptors);
+        this.handler = new AsyncWaiterExecutor<>(pollingStrategy, waiterAcceptors, executorService);
     }
 
     @Override
-    public WaiterResponse<T> run(Supplier<T> pollingFunction) {
-        WaiterExecutor<T> handler = new WaiterExecutor<>(pollingStrategy, waiterAcceptors);
-        return handler.execute(pollingFunction);
+    public CompletableFuture<WaiterResponse<T>> runAsync(Supplier<CompletableFuture<T>> asyncPollingFunction) {
+        return handler.execute(asyncPollingFunction);
     }
 
     public static <T> Builder<T> builder() {
@@ -54,9 +59,16 @@ public final class DefaultWaiter<T> implements Waiter<T> {
 
     public static final class DefaultBuilder<T> implements Builder<T> {
         private List<WaiterAcceptor<T>> waiterAcceptors = new ArrayList<>();
+        private ScheduledExecutorService scheduledExecutorService;
         private PollingStrategy pollingStrategy;
 
         private DefaultBuilder() {
+        }
+
+        @Override
+        public Builder<T> scheduledExecutorService(ScheduledExecutorService scheduledExecutorService) {
+            this.scheduledExecutorService = scheduledExecutorService;
+            return this;
         }
 
         @Override
@@ -77,9 +89,8 @@ public final class DefaultWaiter<T> implements Waiter<T> {
             return this;
         }
 
-        @Override
-        public Waiter<T> build() {
-            return new DefaultWaiter<>(this);
+        public DefaultAsyncWaiter<T> build() {
+            return new DefaultAsyncWaiter<>(this);
         }
     }
 }

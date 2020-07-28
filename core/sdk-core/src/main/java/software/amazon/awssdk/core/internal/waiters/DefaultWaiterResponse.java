@@ -18,7 +18,6 @@ package software.amazon.awssdk.core.internal.waiters;
 import static software.amazon.awssdk.utils.Validate.mutuallyExclusive;
 
 import java.util.Objects;
-import java.util.Optional;
 import software.amazon.awssdk.annotations.SdkInternalApi;
 import software.amazon.awssdk.core.waiters.WaiterResponse;
 import software.amazon.awssdk.utils.ToString;
@@ -42,18 +41,14 @@ public final class DefaultWaiterResponse<T> implements WaiterResponse<T> {
         Validate.isPositive(builder.attemptsExecuted, "attemptsExecuted");
     }
 
+
     public static <T> Builder<T> builder() {
         return new Builder<>();
     }
 
     @Override
-    public Optional<T> response() {
-        return Optional.ofNullable(result);
-    }
-
-    @Override
-    public Optional<Throwable> exception() {
-        return Optional.ofNullable(exception);
+    public ResponseOrException<T> responseOrException() {
+        return result != null ? ResponseOrException.response(result) : ResponseOrException.exception(exception);
     }
 
     @Override
@@ -94,8 +89,7 @@ public final class DefaultWaiterResponse<T> implements WaiterResponse<T> {
         ToString toString = ToString.builder("DefaultWaiterResponse")
                                     .add("attemptsExecuted", attemptsExecuted);
 
-        exception().ifPresent(e -> toString.add("exception", e.getMessage()));
-        response().ifPresent(r -> toString.add("response", r));
+        responseOrException().apply(r -> toString.add("response", r), e -> toString.add("exception", e.getMessage()));
         return toString.build();
     }
 

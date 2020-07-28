@@ -16,7 +16,6 @@
 package software.amazon.awssdk.core.waiters;
 
 
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -30,29 +29,42 @@ import software.amazon.awssdk.utils.CompletableFutureUtils;
 public class AsyncWaiterTest extends BaseWaiterTest {
 
     @Override
-    public BiFunction<Integer, Waiter<String>, WaiterResponse<String>> successOnResponseWaiterOperation() {
-        return (count, waiter) -> waiter.runAsync(new ReturnResponseResource(count)).join();
+    public BiFunction<Integer, TestWaiterConfiguration, WaiterResponse<String>> successOnResponseWaiterOperation() {
+        return (count, waiterConfiguration) -> AsyncWaiter.builder(String.class)
+                                                          .pollingStrategy(waiterConfiguration.getPollingStrategy())
+                                                          .acceptors(waiterConfiguration.getWaiterAcceptors())
+                                                          .scheduledExecutorService(executorService)
+                                                          .build()
+                                                          .runAsync(new ReturnResponseResource(count)).join();
     }
 
     @Override
-    public BiFunction<Integer, Waiter<String>, WaiterResponse<String>> successOnExceptionWaiterOperation() {
-        return (count, waiter) -> waiter.runAsync(new ThrowExceptionResource(count)).join();
+    public BiFunction<Integer, TestWaiterConfiguration, WaiterResponse<String>> successOnExceptionWaiterOperation() {
+        return (count, waiterConfiguration) -> AsyncWaiter.builder(String.class)
+                                                          .pollingStrategy(waiterConfiguration.getPollingStrategy())
+                                                          .acceptors(waiterConfiguration.getWaiterAcceptors())
+                                                          .scheduledExecutorService(executorService)
+                                                          .build()
+                                                          .runAsync(new ThrowExceptionResource(count)).join();
     }
 
     @Test
     public void missingScheduledExecutor_shouldThrowException() {
-        assertThatThrownBy(() ->Waiter.builder(String.class)
-                                      .pollingStrategy(p -> p.maxAttempts(3).backoffStrategy(BackoffStrategy.none()))
-                                      .build().runAsync(() -> null)).hasMessageContaining("executorService");
+        assertThatThrownBy(() -> AsyncWaiter.builder(String.class)
+                                            .pollingStrategy(p -> p.maxAttempts(3).backoffStrategy(BackoffStrategy.none()))
+                                            .build()
+                                            .runAsync(() -> null))
+            .hasMessageContaining("executorService");
     }
 
     @Test
     public void concurrentWaiterOperations_shouldBeThreadSafe() {
-        Waiter<String> waiter = Waiter.builder(String.class)
-                                      .pollingStrategy(p -> p.maxAttempts(4).backoffStrategy(BackoffStrategy.none()))
-                                      .addAcceptor(WaiterAcceptor.successOnResponseAcceptor(s -> s.equals(SUCCESS_STATE_MESSAGE)))
-                                      .scheduledExecutorService(executorService)
-                                      .build();
+        AsyncWaiter<String> waiter = AsyncWaiter.builder(String.class)
+                                                .pollingStrategy(p -> p.maxAttempts(4).backoffStrategy(BackoffStrategy.none()))
+                                                .addAcceptor(WaiterAcceptor.successOnResponseAcceptor(s -> s.equals(SUCCESS_STATE_MESSAGE)))
+                                                .addAcceptor(WaiterAcceptor.retryOnResponseAcceptor(i -> true))
+                                                .scheduledExecutorService(executorService)
+                                                .build();
 
         CompletableFuture<WaiterResponse<String>> waiterResponse1 =
             waiter.runAsync(new ReturnResponseResource(2));

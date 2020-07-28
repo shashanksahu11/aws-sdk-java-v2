@@ -69,8 +69,8 @@ public class DefaultWaiterResponseTest {
             .attemptsExecuted(1)
             .build();
 
-        assertThat(response.exception()).contains(exception);
-        assertThat(response.response()).isEmpty();
+        assertThat(response.responseOrException().exception()).contains(exception);
+        assertThat(response.responseOrException().response()).isEmpty();
         assertThat(response.attemptsExecuted()).isEqualTo(1);
     }
 
@@ -81,8 +81,9 @@ public class DefaultWaiterResponseTest {
             .attemptsExecuted(2)
             .build();
 
-        assertThat(response.response()).contains("helloworld");
-        assertThat(response.exception()).isEmpty();
+
+        assertThat(response.responseOrException().response()).contains("helloworld");
+        assertThat(response.responseOrException().exception()).isEmpty();
         assertThat(response.attemptsExecuted()).isEqualTo(2);
     }
 }
